@@ -16,6 +16,7 @@ use Elastica\Exception\ResponseException;
 use Kdyby;
 use Nette;
 use Nette\Utils\ObjectMixin;
+use Nette\SmartObject;
 
 
 
@@ -31,6 +32,7 @@ use Nette\Utils\ObjectMixin;
  */
 class SchemaManager extends Doctrine\Search\ElasticSearch\SchemaManager
 {
+    use SmartObject;
 
 	/**
 	 * @var array
@@ -93,7 +95,8 @@ class SchemaManager extends Doctrine\Search\ElasticSearch\SchemaManager
 
 	public function dropType(ClassMetadata $class)
 	{
-		$result = parent::dropType($class);
+	    $result = true;
+		//$result = parent::dropType($class);
 		$this->onTypeDropped($this, $class);
 		return $result;
 	}
@@ -110,26 +113,6 @@ class SchemaManager extends Doctrine\Search\ElasticSearch\SchemaManager
 			$this->onAliasError($this, $e, $original, $alias);
 			throw $e;
 		}
-	}
-
-
-
-	/*************************** Nette\Object ***************************/
-
-
-
-	/**
-	 * Call to undefined method.
-	 *
-	 * @param string $name
-	 * @param array $args
-	 *
-	 * @throws \Nette\MemberAccessException
-	 * @return mixed
-	 */
-	public function __call($name, $args)
-	{
-		return ObjectMixin::call($this, $name, $args);
 	}
 
 }

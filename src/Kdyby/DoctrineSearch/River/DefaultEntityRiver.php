@@ -17,6 +17,7 @@ use Doctrine\ORM\Mapping\ClassMetadata as ORMMetadata;
 use Doctrine\Search\SearchManager;
 use Kdyby;
 use Nette;
+use Nette\SmartObject;
 
 
 
@@ -27,8 +28,9 @@ use Nette;
  * @method onIndexStats(DefaultEntityRiver $self, ORMMetadata $class, int $timeToIndex, int $timeToRead)
  * @method onItemsIndexed(DefaultEntityRiver $self, array $entities)
  */
-class DefaultEntityRiver extends Nette\Object implements EntityRiver
+class DefaultEntityRiver implements EntityRiver
 {
+	use SmartObject;
 
 	/**
 	 * @var array

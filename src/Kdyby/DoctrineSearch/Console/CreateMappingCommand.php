@@ -99,7 +99,7 @@ class CreateMappingCommand extends Command
 			$this->schema->dropMappings($classes);
 		}
 
-		$aliases = $this->schema->createMappings($classes, TRUE);
+		$aliases = $this->schema->createMappings($classes, FALSE);
 
 		if ($input->getOption('init-data')) {
 			$indexAliases = array();

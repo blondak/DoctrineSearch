@@ -16,6 +16,7 @@ use Doctrine\ORM\Mapping\ClassMetadata as ORMMetadata;
 use Doctrine\Search\SearchManager;
 use Kdyby;
 use Nette;
+use Nette\SmartObject;
 
 
 
@@ -27,8 +28,9 @@ use Nette;
  * @method onItemsIndexed(EntityPiper $self, array $entities)
  * @method onChildSkipped(EntityPiper $self, ClassMetadata $meta, ClassMetadata $parentMeta)
  */
-class EntityPiper extends Nette\Object
+class EntityPiper
 {
+	use SmartObject;
 
 	/**
 	 * @var array
