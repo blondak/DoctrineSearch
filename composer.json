@@ -21,7 +21,7 @@
 		"kdyby/doctrine-cache": "*",
 		"kdyby/elastic-search": "@dev",
 		"doctrine/orm": "~2.4",
-		"doctrine/search" : "dev-devel"
+		"doctrine/search" : "dev-dev-master"
 	},
 	"suggest": {
 		"kdyby/console": "Great library for integrating the Symfony Console into Nette Framework",
@@ -43,6 +43,6 @@
 		]
 	},
 	"repositories": [
-		{ "type": "vcs", "url": "https://github.com/rohlikcz/doctrine-search.git" }
+		{ "type": "vcs", "url": "https://github.com/blondak/doctrine-search.git" }
 	]
 }
