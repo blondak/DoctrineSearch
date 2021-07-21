@@ -128,44 +128,50 @@ class PipeEntitiesCommand extends Command
 		}
 
 		foreach ($allClassesForIndex as $class) { //subclass bug
-			if (isset($aliases[$class->getIndexName()])) {
-				$class->index->name = $aliases[$class->getIndexName()];
-			}
+		    foreach ($class->index as $indexName => $index){
+    			if (isset($aliases[$indexName])) {
+    				$index->name = $aliases[$indexName];
+    			}
+		    }
 		}
 
 		foreach ($classes as $class) {
-			$output->writeln('');
+		    foreach ($class->index as $indexName => $index){
+		        $output->writeln('');
 
-			if ($old = array_search($class->getIndexName(), $aliases, TRUE)) {
-				$output->writeln(sprintf('Redirecting data from <info>%s</info> to <info>%s</info>', $old, $class->getIndexName()));
-			}
+    			if ($old = array_search($indexName, $aliases, TRUE)) {
+    				$output->writeln(sprintf('Redirecting data from <info>%s</info> to <info>%s</info>', $old, $index->name));
+    			}
 
-			unset($e);
-			try {
-				$this->entityPiper->indexEntities($class);
+    			unset($e);
+    			try {
+    				$this->entityPiper->indexEntities($class);
 
-			} catch (\Exception $e) { }
+    			} catch (\Exception $e) { }
 
-			if (isset($e)) {
-				// fix the metadata
-				if ($old = array_search($class->getIndexName(), $aliases, TRUE)) {
-					$class->index->name = $old;
-				}
+    			if (isset($e)) {
+    				// fix the metadata
+    				if ($old = array_search($index->name, $aliases, TRUE)) {
+    					$index->name = $old;
+    				}
 
-				throw $e;
-			}
+    				throw $e;
+    			}
 
-			if ($progress !== NULL) {
-				$progress->finish();
-			}
-			$output->writeln('');
+    			if ($progress !== NULL) {
+    				$progress->finish();
+    			}
+    			$output->writeln('');
+		    }
 		}
 
 		foreach ($allClassesForIndex as $class) { //subclass bug
 			// fix the metadata
-			if ($old = array_search($class->getIndexName(), $aliases, TRUE)) {
-				$class->index->name = $old;
-			}
+		    foreach ($class->index as $indexName => $index){
+    			if ($old = array_search($index->name, $aliases, TRUE)) {
+    				$index->name = $old;
+    			}
+		    }
 		}
 	}
 

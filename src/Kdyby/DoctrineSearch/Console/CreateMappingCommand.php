@@ -19,6 +19,7 @@ use Symfony\Component\Console\Input\ArrayInput;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
+use Doctrine\Search\Mapping\IndexMetadata;
 
 
 
@@ -68,8 +69,8 @@ class CreateMappingCommand extends Command
 		$this->schema->onIndexCreated[] = function ($sm, $index) use ($output) {
 			$output->writeln(sprintf('Created index <info>%s</info>', $index));
 		};
-		$this->schema->onTypeCreated[] = function ($sm, ClassMetadata $type) use ($output) {
-			$output->writeln(sprintf('Created type <info>%s</info>', $type->getName()));
+		$this->schema->onTypeCreated[] = function ($sm, ClassMetadata $type, IndexMetadata $indexMetadata) use ($output) {
+			$output->writeln(sprintf('Created type <info>%s</info> for index <info>%s</info>', $type->getName(), $indexMetadata->name));
 		};
 
 		$this->schema->onAliasCreated[] = function ($sm, $original, $alias) use ($output) {
@@ -98,7 +99,6 @@ class CreateMappingCommand extends Command
 		if ($input->getOption('drop-before')) {
 			$this->schema->dropMappings($classes);
 		}
-
 		$aliases = $this->schema->createMappings($classes, FALSE);
 
 		if ($input->getOption('init-data')) {

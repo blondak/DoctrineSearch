@@ -12,6 +12,7 @@ namespace Kdyby\DoctrineSearch;
 
 use Doctrine;
 use Doctrine\Search\Mapping\ClassMetadata;
+use Doctrine\Search\Mapping\IndexMetadata;
 use Elastica\Exception\ResponseException;
 use Kdyby;
 use Nette;
@@ -66,10 +67,10 @@ class SchemaManager extends Doctrine\Search\ElasticSearch\SchemaManager
 
 
 
-	public function createIndex(ClassMetadata $class)
+	public function createIndex(ClassMetadata $class, IndexMetadata $indexMetadata)
 	{
-		$result = parent::createIndex($class);
-		$this->onIndexCreated($this, $class->getIndexName());
+		$result = parent::createIndex($class, $indexMetadata);
+		$this->onIndexCreated($this, $indexMetadata->name);
 		return $result;
 	}
 
@@ -84,10 +85,10 @@ class SchemaManager extends Doctrine\Search\ElasticSearch\SchemaManager
 
 
 
-	public function createType(ClassMetadata $class)
+	public function createType(ClassMetadata $class, IndexMetadata $indexMetadata)
 	{
-		$result = parent::createType($class);
-		$this->onTypeCreated($this, $class);
+	    $result = parent::createType($class, $indexMetadata);
+		$this->onTypeCreated($this, $class, $indexMetadata);
 		return $result;
 	}
 
