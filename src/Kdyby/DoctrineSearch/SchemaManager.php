@@ -94,7 +94,7 @@ class SchemaManager extends Doctrine\Search\ElasticSearch\SchemaManager
 
 
 
-	public function dropType(ClassMetadata $class)
+	public function dropType(ClassMetadata $class, IndexMetadata $indexMetadata)
 	{
 	    $result = true;
 		//$result = parent::dropType($class);
