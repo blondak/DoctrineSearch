@@ -76,10 +76,10 @@ class SchemaManager extends Doctrine\Search\ElasticSearch\SchemaManager
 
 
 
-	public function dropIndex($index)
+	public function dropIndex(IndexMetadata $indexMetadata)
 	{
-		$result = parent::dropIndex($index);
-		$this->onIndexDropped($this, $index);
+		$result = parent::dropIndex($indexMetadata);
+		$this->onIndexDropped($this, $indexMetadata);
 		return $result;
 	}
 

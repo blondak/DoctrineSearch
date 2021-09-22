@@ -59,8 +59,8 @@ class CreateMappingCommand extends Command
 	{
 		parent::initialize($input, $output);
 
-		$this->schema->onIndexDropped[] = function ($sm, $index) use ($output) {
-			$output->writeln(sprintf('<error>Dropped</error> index <info>%s</info>', $index));
+		$this->schema->onIndexDropped[] = function ($sm, IndexMetadata $index) use ($output) {
+			$output->writeln(sprintf('<error>Dropped</error> index <info>%s</info>', $index->name));
 		};
 		$this->schema->onTypeDropped[] = function ($sm, ClassMetadata $type) use ($output) {
 			$output->writeln(sprintf('<error>Dropped</error> type <info>%s</info>', $type->getName()));
