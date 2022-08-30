@@ -16,6 +16,7 @@ use Kdyby\DoctrineCache\DI\Helpers as CacheHelpers;
 use Nette;
 use Nette\DI\Config;
 use Nette\PhpGenerator as Code;
+use Nette\Utils\Validators;
 
 
 /**
@@ -24,183 +25,219 @@ use Nette\PhpGenerator as Code;
 class DoctrineSearchExtension extends Nette\DI\CompilerExtension
 {
 
-	/**
-	 * @var array
-	 */
-	public $defaults = array(
-		'metadataCache' => 'default',
-		'defaultSerializer' => 'callback',
-		'serializers' => array(),
-		'metadata' => array(),
-		'indexPrefix' => NULL,
-		'debugger' => '%debugMode%',
-	);
+    /**
+     * @var array
+     */
+    public $defaults = array(
+        'metadataCache' => 'default',
+        'defaultSerializer' => 'callback',
+        'serializers' => array(),
+        'metadata' => array(),
+        'indexPrefix' => NULL,
+        'debugger' => '%debugMode%',
+    );
 
 
 
-	public function loadConfiguration()
-	{
-		$builder = $this->getContainerBuilder();
-		$config = $this->getConfig($this->defaults);
+    public function loadConfiguration()
+    {
+        $builder = $this->getContainerBuilder();
+        $config = $this->getConfig($this->defaults);
 
-		$configuration = $builder->addDefinition($this->prefix('config'))
-			->setClass('Doctrine\Search\Configuration')
-			->addSetup('setMetadataCacheImpl', array(CacheHelpers::processCache($this, $config['metadataCache'], 'metadata', $config['debugger'])))
-			->addSetup('setObjectManager', array('@Doctrine\\ORM\\EntityManager'))
-			->addSetup('setIndexPrefix', array($config['indexPrefix']));
+        $configuration = $builder->addDefinition($this->prefix('config'))
+            ->setClass('Doctrine\Search\Configuration')
+            ->addSetup('setMetadataCacheImpl', array(CacheHelpers::processCache($this, $config['metadataCache'], 'metadata', $config['debugger'])))
+            ->addSetup('setObjectManager', array('@Doctrine\\ORM\\EntityManager'))
+            ->addSetup('setIndexPrefix', array($config['indexPrefix']));
 
-		$this->loadSerializer($config);
-		$configuration->addSetup('setEntitySerializer', array($this->prefix('@serializer')));
+        $this->loadSerializer($config);
+        $configuration->addSetup('setEntitySerializer', array($this->prefix('@serializer')));
 
-		$builder->addDefinition($this->prefix('driver'))
-			->setClass('Doctrine\Search\Mapping\Driver\DependentMappingDriver', array($this->prefix('@driverChain')))
-			->setAutowired(FALSE);
-		$configuration->addSetup('setMetadataDriverImpl', array($this->prefix('@driver')));
+        $builder->addDefinition($this->prefix('driver'))
+            ->setClass('Doctrine\Search\Mapping\Driver\DependentMappingDriver', array($this->prefix('@driverChain')))
+            ->setAutowired(FALSE);
+        $configuration->addSetup('setMetadataDriverImpl', array($this->prefix('@driver')));
 
-		$metadataDriverChain = $builder->addDefinition($this->prefix('driverChain'))
-			->setClass('Doctrine\Common\Persistence\Mapping\Driver\MappingDriverChain')
-			->setAutowired(FALSE);
+        $metadataDriverChain = $builder->addDefinition($this->prefix('driverChain'))
+            ->setClass('Doctrine\Common\Persistence\Mapping\Driver\MappingDriverChain')
+            ->setAutowired(FALSE);
 
-		foreach ($config['metadata'] as $namespace => $directory) {
-			$metadataDriverChain->addSetup('addDriver', array(
-				new Nette\DI\Statement('Doctrine\Search\Mapping\Driver\NeonDriver', array($directory)),
-				$namespace
-			));
-		}
+        foreach ($config['metadata'] as $namespace => $directory) {
+            $metadataDriverChain->addSetup('addDriver', array(
+                new Nette\DI\Statement('Doctrine\Search\Mapping\Driver\NeonDriver', array($directory)),
+                $namespace
+            ));
+        }
 
-		$builder->addDefinition($this->prefix('client'))
-			->setClass('Doctrine\Search\ElasticSearch\Client', array('@Elastica\Client'));
+        foreach ($this->compiler->getExtensions() as $extension) {
+            if ($extension instanceof ISearchMetadataProvider) {
+                $metadata = $extension->getSearchMetadataMappings();
+                Validators::assert($metadata, 'array');
+                foreach ($metadata as $namespace => $directory) {
+                    if (array_key_exists($namespace, $config['metadata'])) {
+                        throw new Nette\Utils\AssertionException(sprintf('The namespace %s is already configured, provider cannot change it', $namespace));
+                    }
+                    if (!file_exists($directory)){
+                        throw new Nette\Utils\AssertionException("The metadata path expects to be an existing directory, $path given.");
+                    }
+                    $metadataDriverChain->addSetup('addDriver', array(
+                        new Nette\DI\Statement(\Doctrine\Search\Mapping\Driver\NeonDriver::class, array($directory)),
+                        $namespace
+                    ));
+                }
+            }
 
-		$builder->addDefinition($this->prefix('evm'))
-			->setClass('Kdyby\Events\NamespacedEventManager', array(Kdyby\DoctrineSearch\Events::NS . '::'))
-			->setAutowired(FALSE);
+            if ($extension instanceof  ISearchSerializerProvider){
+                $serializer = $builder->getDefinition($this->prefix('serializer'));
+                $serializers = $extension->getSearchSerializerMappings();
+                Validators::assert($serializers, 'array');
+                foreach ($serializers as $type => $impl) {
+                    $impl = self::filterArgs($impl);
 
-		$builder->addDefinition($this->prefix('manager'))
-			->setClass('Doctrine\Search\SearchManager', array(
-				$this->prefix('@config'),
-				$this->prefix('@client'),
-				$this->prefix('@evm'),
-			));
+                    if (is_string($impl->entity) && substr($impl->entity, 0, 1) === '@') {
+                        $serializer->addSetup('addSerializer', array($type, $impl->entity));
 
-		$builder->addDefinition($this->prefix('searchableListener'))
-			->setClass('Kdyby\DoctrineSearch\SearchableListener')
-			->addTag('kdyby.subscriber');
+                    } else {
+                        $builder->addDefinition($this->prefix($name = 'serializer.' . str_replace('\\', '_', $type)))
+                        ->setFactory($impl->entity, $impl->arguments)
+                        ->setClass((is_string($impl->entity) && class_exists($impl->entity)) ? $impl->entity : 'Doctrine\Search\SerializerInterface')
+                        ->setAutowired(FALSE);
 
-		$builder->addDefinition($this->prefix('schema'))
-			->setClass('Kdyby\DoctrineSearch\SchemaManager', array($this->prefix('@client')));
+                        $serializer->addSetup('addSerializer', array($type, $this->prefix('@' . $name)));
+                    }
+                }
+            }
+        }
 
-		$builder->addDefinition($this->prefix('entityPiper'))
-			->setClass('Kdyby\DoctrineSearch\EntityPiper');
+        $builder->addDefinition($this->prefix('client'))
+            ->setClass('Doctrine\Search\ElasticSearch\Client', array('@Elastica\Client'));
 
-		$this->loadConsole();
-	}
+        $builder->addDefinition($this->prefix('evm'))
+            ->setClass('Kdyby\Events\NamespacedEventManager', array(Kdyby\DoctrineSearch\Events::NS . '::'))
+            ->setAutowired(FALSE);
 
+        $builder->addDefinition($this->prefix('manager'))
+            ->setClass('Doctrine\Search\SearchManager', array(
+                $this->prefix('@config'),
+                $this->prefix('@client'),
+                $this->prefix('@evm'),
+            ));
 
+        $builder->addDefinition($this->prefix('searchableListener'))
+            ->setClass('Kdyby\DoctrineSearch\SearchableListener')
+            ->addTag('kdyby.subscriber');
 
-	protected function loadSerializer($config)
-	{
-		$builder = $this->getContainerBuilder();
+        $builder->addDefinition($this->prefix('schema'))
+            ->setClass('Kdyby\DoctrineSearch\SchemaManager', array($this->prefix('@client')));
 
-		switch ($config['defaultSerializer']) {
-			case 'callback':
-				$serializer = new Nette\DI\Statement('Doctrine\Search\Serializer\CallbackSerializer');
-				break;
+        $builder->addDefinition($this->prefix('entityPiper'))
+            ->setClass('Kdyby\DoctrineSearch\EntityPiper');
 
-			case 'jms':
-				$builder->addDefinition($this->prefix('jms.serializationBuilder'))
-					->setClass('JMS\Serializer\SerializerBuilder')
-					->addSetup('setPropertyNamingStrategy', array(
-						new Nette\DI\Statement('JMS\Serializer\Naming\SerializedNameAnnotationStrategy', array(
-							new Nette\DI\Statement('JMS\Serializer\Naming\IdenticalPropertyNamingStrategy')
-						))
-					))
-					->addSetup('addDefaultHandlers')
-					->addSetup('setAnnotationReader')
-					->setAutowired(FALSE);
-
-				$builder->addDefinition($this->prefix('jms.serializer'))
-					->setClass('JMS\Serializer\Serializer')
-					->setFactory($this->prefix('@jms.serializationBuilder::build'))
-					// todo: getMetadataFactory()->setCache()
-					->setAutowired(FALSE);
-
-				$builder->addDefinition($this->prefix('jms.serializerContext'))
-					->setClass('JMS\Serializer\SerializationContext')
-					->addSetup('setGroups', array('search'))
-					->setAutowired(FALSE);
-
-				$serializer = new Nette\DI\Statement('Doctrine\Search\Serializer\JMSSerializer', array(
-					$this->prefix('@jms.serializer'),
-					$this->prefix('@jms.serializerContext')
-				));
-				break;
-
-			default:
-				throw new Kdyby\DoctrineSearch\NotImplementedException(
-					sprintf('Serializer "%s" is not supported', $config['defaultSerializer'])
-				);
-		}
-
-		$serializer = $builder->addDefinition($this->prefix('serializer'))
-			->setClass('Doctrine\Search\Serializer\ChainSerializer')
-			->addSetup('setDefaultSerializer', array($serializer));
-
-		foreach ($config['serializers'] as $type => $impl) {
-			$impl = self::filterArgs($impl);
-
-			if (is_string($impl->entity) && substr($impl->entity, 0, 1) === '@') {
-				$serializer->addSetup('addSerializer', array($type, $impl->entity));
-
-			} else {
-				$builder->addDefinition($this->prefix($name = 'serializer.' . str_replace('\\', '_', $type)))
-					->setFactory($impl->entity, $impl->arguments)
-					->setClass((is_string($impl->entity) && class_exists($impl->entity)) ? $impl->entity : 'Doctrine\Search\SerializerInterface')
-					->setAutowired(FALSE);
-
-				$serializer->addSetup('addSerializer', array($type, $this->prefix('@' . $name)));
-			}
-		}
-	}
+        $this->loadConsole();
+    }
 
 
 
-	protected function loadConsole()
-	{
-		$builder = $this->getContainerBuilder();
+    protected function loadSerializer($config)
+    {
+        $builder = $this->getContainerBuilder();
 
-		$builder->addDefinition($this->prefix('console.createMapping'))
-			->setClass('Kdyby\DoctrineSearch\Console\CreateMappingCommand')
-			->addTag('kdyby.console.command');
+        switch ($config['defaultSerializer']) {
+            case 'callback':
+                $serializer = new Nette\DI\Statement('Doctrine\Search\Serializer\CallbackSerializer');
+                break;
 
-		$builder->addDefinition($this->prefix('console.pipeEntities'))
-			->setClass('Kdyby\DoctrineSearch\Console\PipeEntitiesCommand')
-			->addTag('kdyby.console.command');
+            case 'jms':
+                $builder->addDefinition($this->prefix('jms.serializationBuilder'))
+                    ->setClass('JMS\Serializer\SerializerBuilder')
+                    ->addSetup('setPropertyNamingStrategy', array(
+                        new Nette\DI\Statement('JMS\Serializer\Naming\SerializedNameAnnotationStrategy', array(
+                            new Nette\DI\Statement('JMS\Serializer\Naming\IdenticalPropertyNamingStrategy')
+                        ))
+                    ))
+                    ->addSetup('addDefaultHandlers')
+                    ->addSetup('setAnnotationReader')
+                    ->setAutowired(FALSE);
 
-		$builder->addDefinition($this->prefix('console.info'))
-			->setClass('Kdyby\DoctrineSearch\Console\InfoCommand')
-			->addTag('kdyby.console.command');
-	}
+                $builder->addDefinition($this->prefix('jms.serializer'))
+                    ->setClass('JMS\Serializer\Serializer')
+                    ->setFactory($this->prefix('@jms.serializationBuilder::build'))
+                    // todo: getMetadataFactory()->setCache()
+                    ->setAutowired(FALSE);
+
+                $builder->addDefinition($this->prefix('jms.serializerContext'))
+                    ->setClass('JMS\Serializer\SerializationContext')
+                    ->addSetup('setGroups', array('search'))
+                    ->setAutowired(FALSE);
+
+                $serializer = new Nette\DI\Statement('Doctrine\Search\Serializer\JMSSerializer', array(
+                    $this->prefix('@jms.serializer'),
+                    $this->prefix('@jms.serializerContext')
+                ));
+                break;
+
+            default:
+                throw new Kdyby\DoctrineSearch\NotImplementedException(
+                    sprintf('Serializer "%s" is not supported', $config['defaultSerializer'])
+                );
+        }
+
+        $serializer = $builder->addDefinition($this->prefix('serializer'))
+            ->setClass('Doctrine\Search\Serializer\ChainSerializer')
+            ->addSetup('setDefaultSerializer', array($serializer));
+
+        foreach ($config['serializers'] as $type => $impl) {
+            $impl = self::filterArgs($impl);
+
+            if (is_string($impl->entity) && substr($impl->entity, 0, 1) === '@') {
+                $serializer->addSetup('addSerializer', array($type, $impl->entity));
+
+            } else {
+                $builder->addDefinition($this->prefix($name = 'serializer.' . str_replace('\\', '_', $type)))
+                    ->setFactory($impl->entity, $impl->arguments)
+                    ->setClass((is_string($impl->entity) && class_exists($impl->entity)) ? $impl->entity : 'Doctrine\Search\SerializerInterface')
+                    ->setAutowired(FALSE);
+
+                $serializer->addSetup('addSerializer', array($type, $this->prefix('@' . $name)));
+            }
+        }
+    }
 
 
 
-	/**
-	 * @param string|Nette\DI\Statement $statement
-	 * @return Nette\DI\Statement
-	 */
-	private static function filterArgs($statement)
-	{
-		$args = Nette\DI\Compiler::filterArguments(array(is_string($statement) ? new Nette\DI\Statement($statement) : $statement));
-		return $args[0];
-	}
+    protected function loadConsole()
+    {
+        $builder = $this->getContainerBuilder();
 
+        $builder->addDefinition($this->prefix('console.createMapping'))
+            ->setClass('Kdyby\DoctrineSearch\Console\CreateMappingCommand')
+            ->addTag('kdyby.console.command');
 
+        $builder->addDefinition($this->prefix('console.pipeEntities'))
+            ->setClass('Kdyby\DoctrineSearch\Console\PipeEntitiesCommand')
+            ->addTag('kdyby.console.command');
 
-	public static function register(Nette\Configurator $configurator)
-	{
-		$configurator->onCompile[] = function ($config, Nette\DI\Compiler $compiler) {
-			$compiler->addExtension('doctrineSearch', new DoctrineSearchExtension());
-		};
-	}
+        $builder->addDefinition($this->prefix('console.info'))
+            ->setClass('Kdyby\DoctrineSearch\Console\InfoCommand')
+            ->addTag('kdyby.console.command');
+    }
+
+    /**
+     * @param string|Nette\DI\Statement $statement
+     * @return Nette\DI\Statement
+     */
+    private static function filterArgs($statement)
+    {
+        $args = Nette\DI\Compiler::filterArguments(array(is_string($statement) ? new Nette\DI\Statement($statement) : $statement));
+        return $args[0];
+    }
+
+    public static function register(Nette\Configurator $configurator)
+    {
+        $configurator->onCompile[] = function ($config, Nette\DI\Compiler $compiler) {
+            $compiler->addExtension('doctrineSearch', new DoctrineSearchExtension());
+        };
+    }
 
 }
 
