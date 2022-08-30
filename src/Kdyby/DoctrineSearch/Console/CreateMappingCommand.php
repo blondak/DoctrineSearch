@@ -29,98 +29,106 @@ use Doctrine\Search\Mapping\IndexMetadata;
 class CreateMappingCommand extends Command
 {
 
-	/**
-	 * @var \Kdyby\DoctrineSearch\SchemaManager
-	 * @inject
-	 */
-	public $schema;
+    /**
+     * @var \Kdyby\DoctrineSearch\SchemaManager
+     * @inject
+     */
+    public $schema;
 
-	/**
-	 * @var \Doctrine\Search\SearchManager
-	 * @inject
-	 */
-	public $searchManager;
-
-
-
-	protected function configure()
-	{
-		$this->setName('elastica:mapping:create')
-			->setDescription("Creates indexes and type mappings in ElasticSearch")
-			->addOption('init-data', 'i', InputOption::VALUE_NONE, "Should the newly created index also be populated with current data?")
-			->addOption('drop-before', 'd', InputOption::VALUE_NONE, "Should the indexes be dropped first, before they're created? WARNING: this drops data!");
-
-		// todo: filtering to only one type at a time
-	}
+    /**
+     * @var \Doctrine\Search\SearchManager
+     * @inject
+     */
+    public $searchManager;
 
 
 
-	protected function initialize(InputInterface $input, OutputInterface $output)
-	{
-		parent::initialize($input, $output);
+    protected function configure()
+    {
+        $this->setName('elastica:mapping:create')
+            ->setDescription("Creates indexes and type mappings in ElasticSearch")
+            ->addOption('init-data', 'i', InputOption::VALUE_NONE, "Should the newly created index also be populated with current data?")
+            ->addOption('drop-before', 'd', InputOption::VALUE_NONE, "Should the indexes be dropped first, before they're created? WARNING: this drops data!")
+            ->addOption('entity', 'e', InputOption::VALUE_OPTIONAL, 'Synchronizes only specified entity')
+        ;
 
-		$this->schema->onIndexDropped[] = function ($sm, IndexMetadata $index) use ($output) {
-			$output->writeln(sprintf('<error>Dropped</error> index <info>%s</info>', $index->name));
-		};
-		$this->schema->onTypeDropped[] = function ($sm, ClassMetadata $type) use ($output) {
-			$output->writeln(sprintf('<error>Dropped</error> type <info>%s</info>', $type->getName()));
-		};
-
-		$this->schema->onIndexCreated[] = function ($sm, $index) use ($output) {
-			$output->writeln(sprintf('Created index <info>%s</info>', $index));
-		};
-		$this->schema->onTypeCreated[] = function ($sm, ClassMetadata $type, IndexMetadata $indexMetadata) use ($output) {
-			$output->writeln(sprintf('Created type <info>%s</info> for index <info>%s</info>', $type->getName(), $indexMetadata->name));
-		};
-
-		$this->schema->onAliasCreated[] = function ($sm, $original, $alias) use ($output) {
-			$output->writeln(sprintf('Created alias <info>%s</info> for index <info>%s</info>', $alias, $original));
-		};
-		$this->schema->onAliasError[] = function ($sm, ResponseException $e, $original, $alias) use ($output) {
-			$output->writeln(sprintf('<error>%s</error>', $e->getMessage()));
-		};
-
-		/** @var \Doctrine\Search\ElasticSearch\Client $searchClient */
-		$searchClient = $this->searchManager->getClient();
-
-		/** @var Kdyby\ElasticSearch\Client $apiClient */
-		$apiClient = $searchClient->getClient();
-		$apiClient->onError = [];
-		$apiClient->onSuccess = [];
-	}
+        // todo: filtering to only one type at a time
+    }
 
 
 
-	protected function execute(InputInterface $input, OutputInterface $output)
-	{
-		$metadataFactory = $this->searchManager->getClassMetadataFactory();
-		$classes = $metadataFactory->getAllMetadata();
+    protected function initialize(InputInterface $input, OutputInterface $output)
+    {
+        parent::initialize($input, $output);
 
-		if ($input->getOption('drop-before')) {
-			$this->schema->dropMappings($classes);
-		}
-		$aliases = $this->schema->createMappings($classes, FALSE);
+        $this->schema->onIndexDropped[] = function ($sm, IndexMetadata $index) use ($output) {
+            $output->writeln(sprintf('<error>Dropped</error> index <info>%s</info>', $index->name));
+        };
+        $this->schema->onTypeDropped[] = function ($sm, ClassMetadata $type) use ($output) {
+            $output->writeln(sprintf('<error>Dropped</error> type <info>%s</info>', $type->getName()));
+        };
 
-		if ($input->getOption('init-data')) {
-			$indexAliases = array();
-			foreach ($aliases as $alias => $original) {
-				$indexAliases[] = $alias . '=' . $original;
-			}
+        $this->schema->onIndexCreated[] = function ($sm, $index) use ($output) {
+            $output->writeln(sprintf('Created index <info>%s</info>', $index));
+        };
+        $this->schema->onTypeCreated[] = function ($sm, ClassMetadata $type, IndexMetadata $indexMetadata) use ($output) {
+            $output->writeln(sprintf('Created type <info>%s</info> for index <info>%s</info>', $type->getName(), $indexMetadata->name));
+        };
 
-			$exitCode = $this->getApplication()->doRun(new ArrayInput(array(
-				'elastica:pipe-entities',
-				'index-aliases' => $indexAliases
-			)), $output);
+        $this->schema->onAliasCreated[] = function ($sm, $original, $alias) use ($output) {
+            $output->writeln(sprintf('Created alias <info>%s</info> for index <info>%s</info>', $alias, $original));
+        };
+        $this->schema->onAliasError[] = function ($sm, ResponseException $e, $original, $alias) use ($output) {
+            $output->writeln(sprintf('<error>%s</error>', $e->getMessage()));
+        };
 
-			if ($exitCode !== 0) {
-				return 1;
-			}
-		}
+        /** @var \Doctrine\Search\ElasticSearch\Client $searchClient */
+        $searchClient = $this->searchManager->getClient();
 
-		$output->writeln('');
-		$this->schema->createAliases($aliases);
+        /** @var Kdyby\ElasticSearch\Client $apiClient */
+        $apiClient = $searchClient->getClient();
+        $apiClient->onError = [];
+        $apiClient->onSuccess = [];
+    }
 
-		return 0;
-	}
+
+
+    protected function execute(InputInterface $input, OutputInterface $output)
+    {
+        $metadataFactory = $this->searchManager->getClassMetadataFactory();
+
+        if ($onlyEntity = $input->getOption('entity')) {
+            $classes = [$metadataFactory->getMetadataFor($onlyEntity)];
+
+        } else {
+            $classes = $metadataFactory->getAllMetadata();
+        }
+
+        if ($input->getOption('drop-before')) {
+            $this->schema->dropMappings($classes);
+        }
+        $aliases = $this->schema->createMappings($classes, FALSE);
+
+        if ($input->getOption('init-data')) {
+            $indexAliases = array();
+            foreach ($aliases as $alias => $original) {
+                $indexAliases[] = $alias . '=' . $original;
+            }
+
+            $exitCode = $this->getApplication()->doRun(new ArrayInput(array(
+                'elastica:pipe-entities',
+                'index-aliases' => $indexAliases
+            )), $output);
+
+            if ($exitCode !== 0) {
+                return 1;
+            }
+        }
+
+        $output->writeln('');
+        $this->schema->createAliases($aliases);
+
+        return 0;
+    }
 
 }
