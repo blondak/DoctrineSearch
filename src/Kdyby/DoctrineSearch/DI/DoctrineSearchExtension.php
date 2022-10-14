@@ -17,7 +17,8 @@ use Nette;
 use Nette\DI\Config;
 use Nette\PhpGenerator as Code;
 use Nette\Utils\Validators;
-
+use Nette\Schema\Expect;
+use Doctrine;
 
 /**
  * @author Filip Procházka <filip@prochazka.su>
@@ -25,44 +26,42 @@ use Nette\Utils\Validators;
 class DoctrineSearchExtension extends Nette\DI\CompilerExtension
 {
 
-    /**
-     * @var array
-     */
-    public $defaults = array(
-        'metadataCache' => 'default',
-        'defaultSerializer' => 'callback',
-        'serializers' => array(),
-        'metadata' => array(),
-        'indexPrefix' => NULL,
-        'debugger' => '%debugMode%',
-    );
-
-
+	public function getConfigSchema(): Nette\Schema\Schema
+	{
+	    return Expect::structure([
+	        'metadataCache' => Expect::string()->default('default'),
+	        'defaultSerializer' => Expect::string()->default('callback'),
+	        'serializers' => Expect::array(),
+	        'metadata' => Expect::array(),
+	        'indexPrefix' => Expect::string(),
+	        'debugger' => Expect::bool(\Tracy\Debugger::$productionMode === true),
+	    ]);
+	}
 
     public function loadConfiguration()
     {
         $builder = $this->getContainerBuilder();
-        $config = $this->getConfig($this->defaults);
+        $config = $this->getConfig();
 
         $configuration = $builder->addDefinition($this->prefix('config'))
-            ->setClass('Doctrine\Search\Configuration')
-            ->addSetup('setMetadataCacheImpl', array(CacheHelpers::processCache($this, $config['metadataCache'], 'metadata', $config['debugger'])))
+            ->setClass(Doctrine\Search\Configuration::class)
+            ->addSetup('setMetadataCacheImpl', array(CacheHelpers::processCache($this, $config->metadataCache, 'metadata', $config->debugger)))
             ->addSetup('setObjectManager', array('@Doctrine\\ORM\\EntityManager'))
-            ->addSetup('setIndexPrefix', array($config['indexPrefix']));
+            ->addSetup('setIndexPrefix', array($config->indexPrefix));
 
         $this->loadSerializer($config);
         $configuration->addSetup('setEntitySerializer', array($this->prefix('@serializer')));
 
         $builder->addDefinition($this->prefix('driver'))
-            ->setClass('Doctrine\Search\Mapping\Driver\DependentMappingDriver', array($this->prefix('@driverChain')))
+            ->setFactory(Doctrine\Search\Mapping\Driver\DependentMappingDriver::class, array($this->prefix('@driverChain')))
             ->setAutowired(FALSE);
         $configuration->addSetup('setMetadataDriverImpl', array($this->prefix('@driver')));
 
         $metadataDriverChain = $builder->addDefinition($this->prefix('driverChain'))
-            ->setClass('Doctrine\Common\Persistence\Mapping\Driver\MappingDriverChain')
+            ->setFactory(Doctrine\Persistence\Mapping\Driver\MappingDriverChain::class)
             ->setAutowired(FALSE);
 
-        foreach ($config['metadata'] as $namespace => $directory) {
+        foreach ($config->metadata as $namespace => $directory) {
             $metadataDriverChain->addSetup('addDriver', array(
                 new Nette\DI\Statement('Doctrine\Search\Mapping\Driver\NeonDriver', array($directory)),
                 $namespace
@@ -110,28 +109,28 @@ class DoctrineSearchExtension extends Nette\DI\CompilerExtension
         }
 
         $builder->addDefinition($this->prefix('client'))
-            ->setClass('Doctrine\Search\ElasticSearch\Client', array('@Elastica\Client'));
+            ->setFactory(Doctrine\Search\ElasticSearch\Client::class, array('@Elastica\Client'));
 
         $builder->addDefinition($this->prefix('evm'))
-            ->setClass('Kdyby\Events\NamespacedEventManager', array(Kdyby\DoctrineSearch\Events::NS . '::'))
+            ->setFactory(Kdyby\Events\NamespacedEventManager::class, array(Kdyby\DoctrineSearch\Events::NS . '::'))
             ->setAutowired(FALSE);
 
         $builder->addDefinition($this->prefix('manager'))
-            ->setClass('Doctrine\Search\SearchManager', array(
+            ->setFactory(Doctrine\Search\SearchManager::class, array(
                 $this->prefix('@config'),
                 $this->prefix('@client'),
                 $this->prefix('@evm'),
             ));
 
         $builder->addDefinition($this->prefix('searchableListener'))
-            ->setClass('Kdyby\DoctrineSearch\SearchableListener')
+            ->setFactory(Kdyby\DoctrineSearch\SearchableListener::class)
             ->addTag('kdyby.subscriber');
 
         $builder->addDefinition($this->prefix('schema'))
-            ->setClass('Kdyby\DoctrineSearch\SchemaManager', array($this->prefix('@client')));
+            ->setFactory(Kdyby\DoctrineSearch\SchemaManager::class, array($this->prefix('@client')));
 
         $builder->addDefinition($this->prefix('entityPiper'))
-            ->setClass('Kdyby\DoctrineSearch\EntityPiper');
+            ->setClass(Kdyby\DoctrineSearch\EntityPiper::class);
 
         $this->loadConsole();
     }
@@ -142,7 +141,7 @@ class DoctrineSearchExtension extends Nette\DI\CompilerExtension
     {
         $builder = $this->getContainerBuilder();
 
-        switch ($config['defaultSerializer']) {
+        switch ($config->defaultSerializer) {
             case 'callback':
                 $serializer = new Nette\DI\Statement('Doctrine\Search\Serializer\CallbackSerializer');
                 break;
@@ -186,7 +185,7 @@ class DoctrineSearchExtension extends Nette\DI\CompilerExtension
             ->setClass('Doctrine\Search\Serializer\ChainSerializer')
             ->addSetup('setDefaultSerializer', array($serializer));
 
-        foreach ($config['serializers'] as $type => $impl) {
+        foreach ($config->serializers as $type => $impl) {
             $impl = self::filterArgs($impl);
 
             if (is_string($impl->entity) && substr($impl->entity, 0, 1) === '@') {
@@ -228,7 +227,7 @@ class DoctrineSearchExtension extends Nette\DI\CompilerExtension
      */
     private static function filterArgs($statement)
     {
-        $args = Nette\DI\Compiler::filterArguments(array(is_string($statement) ? new Nette\DI\Statement($statement) : $statement));
+        $args = Nette\DI\Helpers::filterArguments(array(is_string($statement) ? new Nette\DI\Statement($statement) : $statement));
         return $args[0];
     }
 
