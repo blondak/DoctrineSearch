@@ -30,19 +30,21 @@ class CreateMappingCommand extends Command
 {
     protected static $defaultName = 'elastica:mapping:create';
 
-    /**
-     * @var \Kdyby\DoctrineSearch\SchemaManager
-     * @inject
-     */
-    public $schema;
+    /** @var \Kdyby\DoctrineSearch\SchemaManager */
+    protected $schema;
 
-    /**
-     * @var \Doctrine\Search\SearchManager
-     * @inject
-     */
-    public $searchManager;
+    /** @var \Doctrine\Search\SearchManager */
+    protected $searchManager;
 
-
+    public function __construct(
+        \Kdyby\DoctrineSearch\SchemaManager $schema,
+        \Doctrine\Search\SearchManager $searchManager
+    )
+    {
+        parent::__construct();
+        $this->schema = $schema;
+        $this->searchManager = $searchManager;
+    }
 
     protected function configure()
     {

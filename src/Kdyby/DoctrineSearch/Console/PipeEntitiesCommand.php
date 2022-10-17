@@ -31,18 +31,20 @@ class PipeEntitiesCommand extends Command
 {
     protected static $defaultName = 'elastica:pipe-entities';
 
-	/**
-	 * @var \Doctrine\Search\SearchManager
-	 * @inject
-	 */
-	public $searchManager;
+	/** @var \Doctrine\Search\SearchManager */
+	protected $searchManager;
 
-	/**
-	 * @var \Kdyby\DoctrineSearch\EntityPiper
-	 * @inject
-	 */
-	public $entityPiper;
+	/** @var \Kdyby\DoctrineSearch\EntityPiper */
+	protected $entityPiper;
 
+	public function __construct(
+	    \Doctrine\Search\SearchManager $searchManager,
+	    \Kdyby\DoctrineSearch\EntityPiper $entityPiper
+    ){
+	    parent::__construct();
+	    $this->searchManager = $searchManager;
+	    $this->entityPiper = $entityPiper;
+	}
 
 
 	protected function configure()

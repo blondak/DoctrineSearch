@@ -32,20 +32,20 @@ class InfoCommand extends Command
 {
     protected static $defaultName = 'elastica:info';
 
-	/**
-	 * @var \Doctrine\Search\SearchManager
-	 * @inject
-	 */
-	public $searchManager;
+    /** @var \Doctrine\Search\SearchManager */
+	protected $searchManager;
 
-
+	public function __construct(
+	    \Doctrine\Search\SearchManager $searchManager
+    ){
+	    parent::__construct();
+	    $this->searchManager = $searchManager;
+	}
 
 	protected function configure()
 	{
 		$this->setName(self::$defaultName);
 	}
-
-
 
 	protected function execute(InputInterface $input, OutputInterface $output)
 	{
