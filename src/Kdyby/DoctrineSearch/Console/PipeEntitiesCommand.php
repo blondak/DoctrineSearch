@@ -29,6 +29,7 @@ use Symfony\Component\Console\Output\OutputInterface;
  */
 class PipeEntitiesCommand extends Command
 {
+    protected static $defaultName = 'elastica:pipe-entities';
 
 	/**
 	 * @var \Doctrine\Search\SearchManager
@@ -46,7 +47,7 @@ class PipeEntitiesCommand extends Command
 
 	protected function configure()
 	{
-		$this->setName('elastica:pipe-entities')
+		$this->setName(self::$defaultName)
 			->addOption('entity', 'e', InputOption::VALUE_OPTIONAL, 'Synchronizes only specified entity')
 			->addOption('stats', NULL, InputOption::VALUE_NONE, 'Show stats of progress')
 			->addArgument('index-aliases', InputArgument::IS_ARRAY, 'Alias map of alias=original for indexes');

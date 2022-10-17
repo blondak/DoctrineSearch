@@ -30,6 +30,7 @@ if (!class_exists('Tracy\Dumper')) {
  */
 class InfoCommand extends Command
 {
+    protected static $defaultName = 'elastica:info';
 
 	/**
 	 * @var \Doctrine\Search\SearchManager
@@ -41,7 +42,7 @@ class InfoCommand extends Command
 
 	protected function configure()
 	{
-		$this->setName('elastica:info');
+		$this->setName(self::$defaultName);
 	}
 
 

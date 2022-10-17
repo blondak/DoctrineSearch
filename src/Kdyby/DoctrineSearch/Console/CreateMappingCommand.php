@@ -28,6 +28,7 @@ use Doctrine\Search\Mapping\IndexMetadata;
  */
 class CreateMappingCommand extends Command
 {
+    protected static $defaultName = 'elastica:mapping:create';
 
     /**
      * @var \Kdyby\DoctrineSearch\SchemaManager
@@ -45,7 +46,7 @@ class CreateMappingCommand extends Command
 
     protected function configure()
     {
-        $this->setName('elastica:mapping:create')
+        $this->setName(self::$defaultName)
             ->setDescription("Creates indexes and type mappings in ElasticSearch")
             ->addOption('init-data', 'i', InputOption::VALUE_NONE, "Should the newly created index also be populated with current data?")
             ->addOption('drop-before', 'd', InputOption::VALUE_NONE, "Should the indexes be dropped first, before they're created? WARNING: this drops data!")
