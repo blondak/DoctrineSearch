@@ -21,7 +21,7 @@
 		"kdyby/doctrine-cache": "*",
 		"kdyby/elastic-search": "@dev",
 		"doctrine/orm": "~2.4",
-		"doctrine/search" : "dev-dev-master"
+		"doctrine/search" : "dev-nette-3"
 	},
 	"suggest": {
 		"kdyby/console": "Great library for integrating the Symfony Console into Nette Framework",
